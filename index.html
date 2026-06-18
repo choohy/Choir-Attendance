@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Choir Attendance Tracker</title>
+    <!-- Tailwind CSS for clean layout -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <header class="border-b border-gray-100 pb-4 mb-6">
+            <h1 class="text-2xl font-semibold tracking-tight text-gray-900">Choir attendance tracker</h1>
+            <p class="text-sm text-gray-500 mt-1">Manage rosters, log guests, and export session data completely offline.</p>
+        </header>
+
+        <!-- Configuration Panel -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <div>
+                <h2 class="text-sm font-medium text-gray-700 mb-2">1. Load roster via CSV</h2>
+                <input type="file" id="csvFileInput" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                <p class="text-xs text-gray-400 mt-1">Expected format: One name per line, or a "Name" column header.</p>
+            </div>
+            
+            <div class="flex items-end gap-2">
+                <div class="flex-1">
+                    <h2 class="text-sm font-medium text-gray-700 mb-2">Manual roster additions</h2>
+                    <input type="text" id="manualNameInput" placeholder="Enter singer's name" class="w-full text-sm bg-white border border-gray-300 rounded-md px-3 py-2 focus:outline-blue-500" />
+                </div>
+                <button onclick="addManualName()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-4 py-2 rounded-md transition-colors h-10">Add</button>
+            </div>
+        </div>
+
+        <!-- Guest Registration Form -->
+        <div class="mb-8 border border-gray-200 rounded-lg p-4">
+            <h2 class="text-base font-medium text-gray-900 mb-3">Add a rehearsal guest</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                <input type="text" id="guestName" placeholder="Full name" class="text-sm bg-white border border-gray-300 rounded-md px-3 py-2 focus:outline-blue-500" />
+                <input type="email" id="guestEmail" placeholder="Email address" class="text-sm bg-white border border-gray-300 rounded-md px-3 py-2 focus:outline-blue-500" />
+                <input type="text" id="guestPhone" placeholder="Phone number" class="text-sm bg-white border border-gray-300 rounded-md px-3 py-2 focus:outline-blue-500" />
+            </div>
+            <button onclick="addGuest()" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm px-5 py-2 rounded-md transition-colors">Register guest</button>
+        </div>
+
+        <!-- Attendance List -->
+        <main class="mb-8">
+            <h2 class="text-lg font-medium text-gray-900 mb-4">Active session list</h2>
+            <div id="attendanceContainer" class="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden bg-white">
+                <!-- Roster items inject dynamically here -->
+                <p id="emptyState" class="p-8 text-center text-sm text-gray-400 italic">No singers loaded yet. Upload a CSV or add names manually above.</p>
+            </div>
+        </main>
+
+        <!-- Footer Action State -->
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-gray-100">
+            <button onclick="clearAllData()" class="text-sm text-red-600 hover:text-red-700 font-medium transition-colors">Reset roster & local cache</button>
+            <div class="flex gap-2 w-full sm:w-auto">
+                <button onclick="saveToLocalStorage()" class="flex-1 sm:flex-initial bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium text-sm px-5 py-2.5 rounded-md transition-colors">Save session</button>
+                <button onclick="exportAttendanceCSV()" class="flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-6 py-2.5 rounded-md shadow-xs transition-colors">Export final CSV</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Prefix keys to avoid domain origin collision on GitHub Pages
+        const STORAGE_KEY = 'choir_app_roster_v1';
+        let roster = [];
+
+        window.onload = () => {
+            loadFromLocalStorage();
+            setupFileInput();
+        };
+
+        function setupFileInput() {
+            document.getElementById('csvFileInput').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const text = event.target.result;
+                    processCSV(text);
+                };
+                reader.readAsText(file);
+            });
+        }
+
+        function processCSV(text) {
+            const lines = text.split(/\r?\n/);
+            lines.forEach(line => {
+                const cleaned = line.trim().replace(/^"|"$/g, '');
+                // Skip headers or empty lines
+                if (!cleaned || cleaned.toLowerCase() === 'name' || cleaned.toLowerCase() === 'member') return;
+                
+                // Avoid duplicates
+                if (!roster.some(r => r.name.toLowerCase() === cleaned.toLowerCase())) {
+                    roster.push({ name: cleaned, type: 'regular', email: '', phone: '', present: false });
+                }
+            });
+            renderList();
+            saveToLocalStorage();
+        }
+
+        function addManualName() {
+            const input = document.getElementById('manualNameInput');
+            const name = input.value.trim();
+            if (!name) return;
+
+            if (roster.some(r => r.name.toLowerCase() === name.toLowerCase())) {
+                alert('This name is already on the list.');
+                return;
+            }
+
+            roster.push({ name: name, type: 'regular', email: '', phone: '', present: false });
+            input.value = '';
+            renderList();
+            saveToLocalStorage();
+        }
+
+        function addGuest() {
+            const nameEl = document.getElementById('guestName');
+            const emailEl = document.getElementById('guestEmail');
+            const phoneEl = document.getElementById('guestPhone');
+
+            const name = nameEl.value.trim();
+            const email = emailEl.value.trim();
+            const phone = phoneEl.value.trim();
+
+            if (!name) {
+                alert('Guest name is required.');
+                return;
+            }
+
+            roster.push({
+                name: name,
+                type: 'guest',
+                email: email || 'N/A',
+                phone: phone || 'N/A',
+                present: true // Default guests to present since they are registering live
+            });
+
+            // Clear inputs
+            nameEl.value = '';
+            emailEl.value = '';
+            phoneEl.value = '';
+
+            renderList();
+            saveToLocalStorage();
+        }
+
+        function removePerson(index) {
+            roster.splice(index, 1);
+            renderList();
+            saveToLocalStorage();
+        }
+
+        function toggleAttendance(index) {
+            roster[index].present = !roster[index].present;
+            saveToLocalStorage();
+        }
+
+        function renderList() {
+            const container = document.getElementById('attendanceContainer');
+            const emptyState = document.getElementById('emptyState');
+
+            // Clear previous runtime renders
+            const items = container.querySelectorAll('.roster-item');
+            items.forEach(item => item.remove());
+
+            if (roster.length === 0) {
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+
+            roster.forEach((person, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = `roster-item flex items-center justify-between p-4 transition-colors ${person.type === 'guest' ? 'bg-emerald-50/40' : 'hover:bg-gray-50'}`;
+                
+                let detailStrings = person.type === 'guest' ? `<span class="text-xs bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded-full ml-2">Guest</span>` : '';
+                if (person.type === 'guest' && (person.email !== 'N/A' || person.phone !== 'N/A')) {
+                    detailStrings += `<p class="text-xs text-gray-400 mt-0.5">${person.email} | ${person.phone}</p>`;
+                }
+
+                wrapper.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" id="check-${index}" ${person.present ? 'checked' : ''} onchange="toggleAttendance(${index})" class="h-4 w-4 text-blue-600 rounded-sm border-gray-300 focus:ring-blue-500" />
+                        <label for="check-${index}" class="text-sm font-medium text-gray-900 cursor-pointer select-none">
+                            <span class="${person.present ? 'line-through text-gray-400' : ''}">${person.name}</span>
+                            ${person.type === 'guest' ? detailStrings : ''}
+                        </label>
+                    </div>
+                    <button onclick="removePerson(${index})" class="text-xs text-gray-400 hover:text-red-500 font-medium p-1 transition-colors">Delete</button>
+                `;
+                container.appendChild(wrapper);
+            });
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(roster));
+        }
+
+        function loadFromLocalStorage() {
+            const data = localStorage.getItem(STORAGE_KEY);
+            if (data) {
+                roster = JSON.parse(data);
+                renderList();
+            }
+        }
+
+        function clearAllData() {
+            if (confirm('Are you sure you want to clear the active list and cache? This cannot be undone.')) {
+                localStorage.removeItem(STORAGE_KEY);
+                roster = [];
+                renderList();
+            }
+        }
+
+        function exportAttendanceCSV() {
+            if (roster.length === 0) {
+                alert('No attendance data available to export.');
+                return;
+            }
+        
+            // Capture today's date in dd/mm/yyyy format
+            const today = new Date();
+            const day = String(today.getDate()).padStart(2, '0');
+            const month = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+            const year = today.getFullYear();
+            const formattedDate = `${day}/${month}/${year}`;
+            
+            // File-safe date format for the filename (yyyy-mm-dd)
+            const fileDateStr = `${year}-${month}-${day}`;
+            
+            // Generate clean headers
+            let csvContent = "data:text/csv;charset=utf-8,Name,Type,Status,Email,Phone,SessionDate\n";
+        
+            roster.forEach(person => {
+                const status = person.present ? "Present" : "Absent";
+                const cleanName = person.name.replace(/"/g, '""');
+                // Injecting the formatted date row by row
+                csvContent += `"${cleanName}","${person.type}","${status}","${person.email}","${person.phone}","${formattedDate}"\n`;
+            });
+        
+            const encodedUri = encodeURI(csvContent);
+            const downloadLink = document.createElement("a");
+            downloadLink.setAttribute("href", encodedUri);
+            downloadLink.setAttribute("download", `choir_attendance_${fileDateStr}.csv`);
+            document.body.appendChild(downloadLink);
+            
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
+    </script>
+</body>
+</html>
