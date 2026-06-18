@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Choir Attendance</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Choir Attendance</h1>
+      <div class="controls">
+        <label>Date: <input id="date" type="date" /></label>
+        <button id="export">Export CSV</button>
+      </div>
+
+      <section class="import-csv">
+        <input id="csvFile" type="file" accept=".csv" />
+        <button id="importBtn">Import CSV</button>
+      </section>
+
+      <section class="add-member">
+        <input id="newName" placeholder="Full name" />
+        <button id="addBtn">Add</button>
+      </section>
+
+      <section class="add-guest">
+        <input id="guestName" placeholder="Guest full name" />
+        <input id="guestEmail" placeholder="Email (optional)" />
+        <input id="guestPhone" placeholder="Phone (optional)" />
+        <button id="addGuestBtn">Add Guest</button>
+      </section>
+
+      <ul id="roster" class="roster"></ul>
+    </main>
+    <script src="main.js"></script>
+  </body>
+</html>
