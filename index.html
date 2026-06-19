@@ -145,6 +145,12 @@
             emailEl.value = '';
             phoneEl.value = '';
 
+            sortAndRender();
+        }
+
+        // Unified function to maintain alphabetical sorting state for UI
+        function sortAndRender() {
+            roster.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
             renderList();
             saveToLocalStorage();
         }
@@ -206,7 +212,7 @@
             const data = localStorage.getItem(STORAGE_KEY);
             if (data) {
                 roster = JSON.parse(data);
-                renderList();
+                sortAndRender();
             }
         }
 
@@ -224,25 +230,30 @@
                 return;
             }
         
-            // Capture today's date in dd/mm/yyyy format
             const today = new Date();
             const day = String(today.getDate()).padStart(2, '0');
-            const month = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+            const month = String(today.getMonth() + 1).padStart(2, '0'); 
             const year = today.getFullYear();
             const formattedDate = `${day}/${month}/${year}`;
-            
-            // File-safe date format for the filename (yyyy-mm-dd)
             const fileDateStr = `${year}-${month}-${day}`;
             
-            // Generate clean headers
-            let csvContent = "data:text/csv;charset=utf-8,Name,Type,Status,Email,Phone,SessionDate\n";
+            let csvContent = "data:text/csv;charset=utf-8,Name,Type,Status,Email,Phone,SessionDate,AttendedBinary\n";
         
-            roster.forEach(person => {
+            // Filter roster into distinct arrays to control order
+            const regularMembers = roster.filter(person => person.type === 'regular');
+            const guests = roster.filter(person => person.type === 'guest');
+        
+            // Helper to format rows
+            const writeRow = (person) => {
                 const status = person.present ? "Present" : "Absent";
+                const binaryStatus = person.present ? 1 : 0; 
                 const cleanName = person.name.replace(/"/g, '""');
-                // Injecting the formatted date row by row
-                csvContent += `"${cleanName}","${person.type}","${status}","${person.email}","${person.phone}","${formattedDate}"\n`;
-            });
+                return `"${cleanName}","${person.type}","${status}","${person.email}","${person.phone}","${formattedDate}",${binaryStatus}\n`;
+            };
+        
+            // Append regulars first, then guests at the bottom
+            regularMembers.forEach(person => { csvContent += writeRow(person); });
+            guests.forEach(person => { csvContent += writeRow(person); });
         
             const encodedUri = encodeURI(csvContent);
             const downloadLink = document.createElement("a");
